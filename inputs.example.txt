@@ -1,0 +1,7 @@
+# One video path or glob pattern per line. Blank lines and # comments are ignored.
+# Relative paths are resolved from this file's folder.
+#   *  any characters in a name     ?  one character     **  any sub-folders
+/media/cam/2026-10-*/VID_*.mp4
+footage/day1/*.MOV
+footage/**/GOPR*.MP4
+extra/single_clip.mkv

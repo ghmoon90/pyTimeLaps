@@ -1,0 +1,27 @@
+{
+  "output": {
+    "path": "out/timelapse.mp4",
+    "format": "mp4",
+    "resolution": "1920x1080",
+    "scale_mode": "fit",
+    "fps": 30,
+    "crf": 23,
+    "preset": "medium"
+  },
+  "timing": {
+    "mode": "speed",
+    "speed": 120
+  },
+  "filter": {
+    "time_ranges": [["06:00", "09:00"], ["17:00", "19:30"]],
+    "mode": "trim",
+    "date_from": null,
+    "date_to": null,
+    "weekdays": null
+  },
+  "timestamp": {
+    "source": "auto"
+  },
+  "sort": "time",
+  "jobs": 4
+}
