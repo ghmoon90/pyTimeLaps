@@ -175,8 +175,9 @@ ffprobe -v error -select_streams v:0 -skip_frame nokey -show_entries frame=pts_t
 ```
 
 The printed times are the keyframe positions in the first 30 s; their spacing is the interval.
-If very short segments (shorter than the keyframe interval) fail or come out empty, turn the
-option off.
+A trimmed segment with no keyframe inside it decodes to nothing; such segments are re-encoded
+automatically with full decoding. Some cameras (many CCTV/IP models) use very long keyframe
+intervals, e.g. 50 s; there the option gives one picture per 50 s and is usually not worth it.
 
 Metadata `creation_time` is stored in UTC and converted to local time before the daily filter is applied;
 filename timestamps are used as-is.

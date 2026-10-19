@@ -385,18 +385,34 @@ def run(cmd):
         raise TimelapseError(f"ffmpeg failed:\n{res.stderr.strip()[-2000:]}")
 
 
+def count_packets(path):
+    res = subprocess.run(["ffprobe", "-v", "quiet", "-select_streams", "v:0", "-count_packets",
+                          "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", path],
+                         capture_output=True, text=True)
+    try:
+        return int(res.stdout.strip().rstrip(","))
+    except ValueError:
+        return 0
+
+
 def encode_segment(job):
     path, offset, length, speed, fps, vf, cargs, keyonly, dst = job
     frames = max(1, round(length / speed * fps))
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
-    if keyonly:
-        cmd += ["-skip_frame", "nokey"]
-    cmd += ["-ss", f"{offset:.3f}", "-t", f"{length:.3f}", "-i", path,
-            "-an", "-sn", "-dn",
-            "-vf", f"setpts=(PTS-STARTPTS)/{speed:.6f},fps={fps},{vf}",
-            "-frames:v", str(frames), *cargs, dst]
-    run(cmd)
-    return dst
+    for skip in ([True, False] if keyonly else [False]):
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
+        if skip:
+            cmd += ["-skip_frame", "nokey"]
+        cmd += ["-ss", f"{offset:.3f}", "-t", f"{length:.3f}", "-i", path,
+                "-an", "-sn", "-dn",
+                "-vf", f"setpts=(PTS-STARTPTS)/{speed:.6f},fps={fps},{vf}",
+                "-frames:v", str(frames), *cargs, dst]
+        run(cmd)
+        # ffmpeg exits 0 with an empty file when no frame was decoded, e.g. a trimmed
+        # segment with no keyframe inside it; retry with full decoding.
+        if count_packets(dst):
+            return dst
+    print(f"\nwarning: no frames from {path} +{offset:.1f}s; segment dropped", file=sys.stderr)
+    return None
 
 
 def concat(segment_files, out_path, out_cfg, workdir):
@@ -472,18 +488,22 @@ def build(args):
         jobs = [(c.path, off, ln, sp, out_cfg["fps"], vf, cargs, settings["keyframes_only"],
                  os.path.join(workdir, f"seg_{i:05d}.mkv"))
                 for i, ((c, off, ln), sp) in enumerate(zip(segs, speeds))]
-        done = 0
+        done, encoded = 0, []
         with ThreadPoolExecutor(max_workers=max(1, int(settings["jobs"]))) as ex:
             futures = [ex.submit(encode_segment, j) for j in jobs]
             for fut in futures:
-                fut.result()
+                dst = fut.result()
+                if dst:
+                    encoded.append(dst)
                 done += 1
                 print(f"\rencoding segments {done}/{len(jobs)}", end="", flush=True)
         print()
+        if not encoded:
+            raise TimelapseError("no segment produced any frames")
         out_path = os.path.abspath(out_cfg["path"])
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         print("joining ...")
-        concat([j[-1] for j in jobs], out_path, out_cfg, workdir)
+        concat(encoded, out_path, out_cfg, workdir)
         print(f"done: {out_path}")
     finally:
         if settings["keep_temp"]:
